@@ -1,102 +1,198 @@
-import Image from "next/image";
+'use client';
+
+import { useRef, useState, useCallback } from "react";
+import GameCanvas, { GameCanvasRef } from "../components/GameCanvas";
+import ChatFeed from "../components/ChatFeed";
+import UpgradeBar from "../components/UpgradeBar";
+import { useGameSocket } from "../services/useGameSocket";
+import { UserData } from "../engine/Enemy";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const gameCanvasRef = useRef<GameCanvasRef>(null);
+  const [lives, setLives] = useState(10);
+  const [score, setScore] = useState(0);
+  const [ballsActive, setBallsActive] = useState(0);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Callbacks para el hook useGameSocket
+  const handleEnemySpawn = useCallback((userData: UserData) => {
+    console.log("🎯 Creando enemigo:", userData);
+
+    // Si es una suscripción con múltiples enemigos, mostrar información adicional
+    if (
+      userData.eventType === "subscription" &&
+      userData.spawnDelay !== undefined
+    ) {
+      const enemyNumber = userData.spawnDelay / 200 + 1;
+      console.log(
+        `   └─ Enemigo ${enemyNumber} de ${userData.name} (${userData.name.length} caracteres)`
+      );
+    }
+
+    gameCanvasRef.current?.addEnemy(userData);
+  }, []);
+
+  const handleUpgradeActivated = useCallback((upgradeType: string) => {
+    console.log("⚡ Upgrade activado:", upgradeType);
+    if (upgradeType === "extra_bounce") {
+      gameCanvasRef.current?.addBounceUpgrade();
+    }
+    // Aquí puedes agregar más tipos de upgrades en el futuro
+  }, []);
+
+  const {
+    isConnected,
+    chatMessages,
+    upgrades,
+    gameStats,
+    reportEnemyDestroyed,
+    reportLifeLost,
+  } = useGameSocket({
+    onEnemySpawn: handleEnemySpawn,
+    onUpgradeActivated: handleUpgradeActivated,
+  });
+
+  const handleLifeLost = useCallback(() => {
+    setLives((prev) => Math.max(0, prev - 1));
+    reportLifeLost();
+  }, [reportLifeLost]);
+
+  const handleEnemyDestroyed = useCallback(
+    (enemyData: UserData) => {
+      setScore((prev) => prev + enemyData.level * 10);
+      reportEnemyDestroyed(enemyData);
+    },
+    [reportEnemyDestroyed]
+  );
+
+  const handleGameOver = useCallback(() => {
+    setLives(0);
+    setBallsActive(0);
+  }, []);
+
+  const handleResetGame = () => {
+    gameCanvasRef.current?.resetGame();
+    setLives(10);
+    setScore(0);
+    setBallsActive(0);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-white">
+      {/* Header */}
+      <header className="bg-gray-800 border-b border-gray-700 p-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-purple-400">
+            Stream Breakout
+          </h1>
+          <div className="flex items-center gap-4">
+            <div
+              className={`flex items-center gap-2 ${
+                isConnected ? "text-green-400" : "text-red-400"
+              }`}
+            >
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  isConnected ? "bg-green-400" : "bg-red-400"
+                }`}
+              ></div>
+              <span className="text-sm">
+                {isConnected ? "Conectado" : "Desconectado"}
+              </span>
+            </div>
+            <button
+              onClick={handleResetGame}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              Reiniciar Juego
+            </button>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+      </header>
+
+      {/* Main Game Area */}
+      <div className="max-w-7xl mx-auto p-4">
+        {/* Community Upgrades - Moved to top with full width */}
+        <div className="mb-6">
+          <UpgradeBar upgrades={upgrades} className="w-full" />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Game Canvas - Takes most space */}
+          <div className="lg:col-span-3">
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold mb-2">Área de Juego</h2>
+                <div className="flex gap-6 text-sm text-gray-300">
+                  <span>Vidas: {lives}</span>
+                  <span>Enemigos Destruidos: {gameStats.enemiesDestroyed}</span>
+                  <span>Puntuación: {score}</span>
+                </div>
+              </div>
+              <div className="border border-gray-600 rounded-lg overflow-hidden">
+                <GameCanvas
+                  ref={gameCanvasRef}
+                  onLifeLost={handleLifeLost}
+                  onEnemyDestroyed={handleEnemyDestroyed}
+                  onGameOver={handleGameOver}
+                  lives={lives}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* Chat Feed */}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="text-lg font-semibold mb-4 text-green-400">
+                Actividad del Stream
+              </h3>
+              <ChatFeed messages={chatMessages} />
+            </div>
+
+            {/* Game Stats */}
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="text-lg font-semibold mb-4 text-blue-400">
+                Estadísticas
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Likes:</span>
+                  <span className="text-pink-400">{gameStats.totalLikes}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Comentarios:</span>
+                  <span className="text-blue-400">
+                    {gameStats.totalComments}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Suscripciones:</span>
+                  <span className="text-green-400">
+                    {gameStats.totalSubscriptions}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Combo:</span>
+                  <span className="text-yellow-400">
+                    {gameStats.currentCombo}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="bg-gray-800 border-t border-gray-700 mt-8 p-4">
+        <div className="max-w-7xl mx-auto text-center text-gray-400 text-sm">
+          <p>Stream Breakout - Juego interactivo para streamers</p>
+          <p className="mt-1">
+            Los viewers pueden influir en el juego a través de follows, subs y
+            donations
+          </p>
+        </div>
       </footer>
     </div>
   );
